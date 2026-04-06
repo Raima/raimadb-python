@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=69.0", "wheel", "Cython>=3.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "raimadb"
+version = "16.1.0"
+description = "Python interface to RaimaDB"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Cython",
+    "Topic :: Database",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

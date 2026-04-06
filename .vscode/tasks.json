@@ -1,0 +1,50 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build (editable install)",
+            "type": "shell",
+            "command": "pip install -e .",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [],
+            "detail": "Install package in editable mode (builds Cython extensions)"
+        },
+        {
+            "label": "Build extensions in-place",
+            "type": "shell",
+            "command": "python setup.py build_ext --inplace",
+            "group": "build",
+            "problemMatcher": [],
+            "detail": "Build .so files into src/ for faster iteration"
+        },
+        {
+            "label": "Run tests",
+            "type": "shell",
+            "command": "python -m unittest discover -v -s tests -p 'test_*.py'",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": [],
+            "detail": "Run all unit tests"
+        },
+        {
+            "label": "Run codegen",
+            "type": "shell",
+            "command": "python codegen/genErrors_python.py",
+            "group": "build",
+            "problemMatcher": [],
+            "detail": "Regenerate retcodetypes and exceptions from errordefns.txt (RDM installation)"
+        },
+        {
+            "label": "Clean build artifacts",
+            "type": "shell",
+            "command": "rm -rf build/ dist/ src/raimadb.egg-info/ src/rdm/*.so src/rdm/*.cpp",
+            "problemMatcher": [],
+            "detail": "Remove all build outputs (does not remove generated .pyx/.pxd)"
+        }
+    ]
+}

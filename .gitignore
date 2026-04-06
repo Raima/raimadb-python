@@ -1,0 +1,37 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Cython generated C/C++ files
+src/rdm/*.cpp
+src/rdm/*.c
+!src/rdm/bcd_convert.cpp
+
+# Generated error-code / exception modules (produced by codegen/genErrors_python.py)
+src/rdm/retcodetypes.pxd
+src/rdm/retcodetypes.pyx
+src/rdm/exceptions.pxd
+src/rdm/exceptions.pyx
+
+# Extension modules
+*.so
+*.pyd
+*.dll
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+
+# RDM database files
+*.rdm/
+tfserver.lock
+
+# IDE
+.idea/
+
+# Virtual environments
+.venv/
+venv/
