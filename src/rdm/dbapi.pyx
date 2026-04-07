@@ -35,7 +35,7 @@ cdef extern from "bcd_convert.h":
     int bcd_to_decimal(const RDM_BCD_T* bcd, PyObject **out)
     int decimal_to_bcd(PyObject *dec, RDM_BCD_T* out)
 
-cdef extern from "rdm_internals.h" namespace "RDM::RUNTIME":
+cdef extern from "table_column.h" namespace "RDM::RUNTIME":
     cdef enum RDM_TYPE:
         BOOLEAN = 0
         UINT8
@@ -64,7 +64,7 @@ cdef extern from "rdm_internals.h" namespace "RDM::RUNTIME":
         _CLOB
         _UNKNOWN
 
-cdef extern from "rdm_internals.h" namespace "RDM::RUNTIME":
+cdef extern from "db_table.h" namespace "RDM::RUNTIME":
     cdef cppclass DB_TABLE:
         DB_TABLE()
         void setDatabase(RDM_DB db) nogil
@@ -74,7 +74,7 @@ cdef extern from "rdm_internals.h" namespace "RDM::RUNTIME":
         RDM_TABLE_ID getId() nogil
         uint32_t getSize() nogil
 
-cdef extern from "rdm_internals.h" namespace "RDM::RUNTIME":
+cdef extern from "table_column.h" namespace "RDM::RUNTIME":
     cdef cppclass TABLE_COLUMN:
         TABLE_COLUMN()
         void setTable(const DB_TABLE* table) nogil
@@ -88,9 +88,9 @@ cdef extern from "rdm_internals.h" namespace "RDM::RUNTIME":
         bint getNullable() nogil
         uint32_t getSize() nogil
         uint16_t getArrayElements() nogil
-        uint16_t getStringLength() nogil
+        uint32_t getStringLength() nogil
 
-cdef extern from "rdm_internals.h" namespace "RDM::RUNTIME":
+cdef extern from "table_key.h" namespace "RDM::RUNTIME":
     cdef cppclass TABLE_KEY:
         TABLE_KEY()
         void setTable(const DB_TABLE* table) nogil
@@ -100,7 +100,7 @@ cdef extern from "rdm_internals.h" namespace "RDM::RUNTIME":
         RDM_KEY_ID getId() nogil
         uint32_t getSize() nogil
 
-cdef extern from "rdm_internals.h" namespace "RDM::RUNTIME":
+cdef extern from "key_element.h" namespace "RDM::RUNTIME":
     cdef cppclass KEY_ELEMENT:
         KEY_ELEMENT()
         void setKey(const TABLE_KEY* key) nogil
@@ -113,9 +113,9 @@ cdef extern from "rdm_internals.h" namespace "RDM::RUNTIME":
         bint getNullable() nogil
         uint32_t getSize() nogil
         uint16_t getArrayElements() nogil
-        uint16_t getStringLength() nogil
+        uint32_t getStringLength() nogil
 
-cdef extern from "rdm_internals.h" namespace "RDM::RUNTIME":
+cdef extern from "db_reference.h" namespace "RDM::RUNTIME":
     cdef cppclass DB_REFERENCE:
         DB_REFERENCE()
         void setDatabase(RDM_DB db) nogil
@@ -128,7 +128,7 @@ cdef extern from "rdm_internals.h" namespace "RDM::RUNTIME":
         RDM_TABLE_ID getPrimaryTableId() nogil
         RDM_TABLE_ID getForeignTableId() nogil
 
-cdef extern from "rdm_internals.h" namespace "RDM::RUNTIME":
+cdef extern from "db_ud_type.h" namespace "RDM::RUNTIME":
     cdef cppclass DB_UD_TYPE:
         DB_UD_TYPE()
         void setDatabase(RDM_DB db) nogil

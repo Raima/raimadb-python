@@ -124,8 +124,7 @@ raimadb-python/
 │   └── rdm/                # The raimadb Python package
 │       ├── __init__.py
 │       ├── *.pyx / *.pxd   # Cython source modules
-│       ├── bcd_convert.cpp  # C++ helper for BCD types
-│       └── rdm_internals.h  # Compatibility header
+│       └── bcd_convert.cpp  # C++ helper for BCD types
 ├── codegen/                # Error-code generation scripts
 │   ├── genErrors_common.py
 │   └── genErrors_python.py
