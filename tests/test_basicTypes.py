@@ -297,5 +297,210 @@ class TestDataTypes(unittest.TestCase):
         self.assertEqual(row.VC_OCTET, 'octet')
         trans.end()
 
+class TestDateTimeTypes(unittest.TestCase):
+    def setUp(self):
+        self.tfs = allocTfs()
+        status = self.tfs.initialize()
+        self.assertEqual(status, Status.Okay, "Failed to initialize TFS")
+        try:
+            self.tfs.dropDatabase("datetime_types_test")
+        except ErrorNoDB:
+            pass
+        self.db = self.tfs.allocDatabase()
+        status = self.db.setCatalog("""
+            create table dt_types (
+                id int primary key,
+                d date default null,
+                t time default null,
+                ttz timetz default null,
+                ts timestamp default null,
+                tstz timestamptz default null
+            );
+        """)
+        self.assertEqual(status, Status.Okay, "Failed to set catalog")
+        status = self.db.open("datetime_types_test", OpenMode.SHARED)
+        self.assertEqual(status, Status.Okay, "Failed to open database")
+
+    def tearDown(self):
+        status = self.db.free()
+        self.assertIn(status, (Status.Okay, Status.TrAborted), "Failed to free database")
+        self.tfs.dropDatabase("datetime_types_test")
+        status = self.tfs.free()
+        self.assertEqual(status, Status.Okay, "Failed to free TFS")
+
+    def test_date(self):
+        import datetime
+        status, trans = self.db.startUpdate()
+        values = [
+            (1, datetime.date(2025, 1, 1)),
+            (2, datetime.date(1, 1, 1)),
+            (3, datetime.date(9999, 12, 31)),
+            (4, datetime.date(2000, 2, 29)),  # Leap year
+            (5, None),
+        ]
+        for id_val, val in values:
+            with self.subTest(value=val):
+                status, row = self.db.insertRow("DT_TYPES", ID=id_val, D=val)
+                self.assertEqual(status, Status.Okay)
+                if val is None:
+                    self.assertIsNone(row.D)
+                else:
+                    self.assertEqual(row.D, val)
+                    self.assertIsInstance(row.D, datetime.date)
+        # Default is null
+        status, row = self.db.insertRow("DT_TYPES", ID=6)
+        self.assertIsNone(row.D)
+        trans.end()
+
+    def test_time(self):
+        import datetime
+        status, trans = self.db.startUpdate()
+        values = [
+            (1, datetime.time(0, 0, 0, 0)),         # Midnight
+            (2, datetime.time(23, 59, 59, 999900)),  # Near max (9999 * 100 us)
+            (3, datetime.time(12, 30, 45, 500000)),  # Mid-day
+            (4, None),
+        ]
+        for id_val, val in values:
+            with self.subTest(value=val):
+                status, row = self.db.insertRow("DT_TYPES", ID=id_val, T=val)
+                self.assertEqual(status, Status.Okay)
+                if val is None:
+                    self.assertIsNone(row.T)
+                else:
+                    self.assertEqual(row.T, val)
+                    self.assertIsInstance(row.T, datetime.time)
+        # Default is null
+        status, row = self.db.insertRow("DT_TYPES", ID=5)
+        self.assertIsNone(row.T)
+        trans.end()
+
+    def test_time_tz(self):
+        import datetime
+        status, trans = self.db.startUpdate()
+        utc = datetime.timezone.utc
+        est = datetime.timezone(datetime.timedelta(hours=-5))
+        ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+        max_pos = datetime.timezone(datetime.timedelta(hours=14))
+        max_neg = datetime.timezone(datetime.timedelta(hours=-14))
+        values = [
+            (1, datetime.time(10, 30, 0, 0, tzinfo=utc)),
+            (2, datetime.time(8, 0, 0, 0, tzinfo=est)),
+            (3, datetime.time(15, 45, 30, 0, tzinfo=ist)),
+            (4, datetime.time(23, 59, 59, 0, tzinfo=max_pos)),
+            (5, datetime.time(0, 0, 0, 0, tzinfo=max_neg)),
+            (6, None),
+        ]
+        for id_val, val in values:
+            with self.subTest(value=val):
+                status, row = self.db.insertRow("DT_TYPES", ID=id_val, TTZ=val)
+                self.assertEqual(status, Status.Okay)
+                if val is None:
+                    self.assertIsNone(row.TTZ)
+                else:
+                    self.assertEqual(row.TTZ, val)
+                    self.assertIsNotNone(row.TTZ.tzinfo)
+        # Default is null
+        status, row = self.db.insertRow("DT_TYPES", ID=7)
+        self.assertIsNone(row.TTZ)
+        trans.end()
+
+    def test_timestamp(self):
+        import datetime
+        status, trans = self.db.startUpdate()
+        values = [
+            (1, datetime.datetime(2025, 4, 9, 14, 30, 0, 0)),
+            (2, datetime.datetime(1, 1, 1, 0, 0, 0, 0)),
+            (3, datetime.datetime(9999, 12, 31, 23, 59, 59, 999900)),
+            (4, datetime.datetime(2000, 2, 29, 12, 0, 0, 500000)),
+            (5, None),
+        ]
+        for id_val, val in values:
+            with self.subTest(value=val):
+                status, row = self.db.insertRow("DT_TYPES", ID=id_val, TS=val)
+                self.assertEqual(status, Status.Okay)
+                if val is None:
+                    self.assertIsNone(row.TS)
+                else:
+                    self.assertEqual(row.TS, val)
+                    self.assertIsInstance(row.TS, datetime.datetime)
+        # Default is null
+        status, row = self.db.insertRow("DT_TYPES", ID=6)
+        self.assertIsNone(row.TS)
+        trans.end()
+
+    def test_timestamp_tz(self):
+        import datetime
+        status, trans = self.db.startUpdate()
+        utc = datetime.timezone.utc
+        est = datetime.timezone(datetime.timedelta(hours=-5))
+        jst = datetime.timezone(datetime.timedelta(hours=9))
+        values = [
+            (1, datetime.datetime(2025, 4, 9, 14, 30, 0, 0, tzinfo=utc)),
+            (2, datetime.datetime(2025, 1, 1, 0, 0, 0, 0, tzinfo=est)),
+            (3, datetime.datetime(9999, 12, 31, 23, 59, 59, 999900, tzinfo=jst)),
+            (4, None),
+        ]
+        for id_val, val in values:
+            with self.subTest(value=val):
+                status, row = self.db.insertRow("DT_TYPES", ID=id_val, TSTZ=val)
+                self.assertEqual(status, Status.Okay)
+                if val is None:
+                    self.assertIsNone(row.TSTZ)
+                else:
+                    self.assertEqual(row.TSTZ, val)
+                    self.assertIsInstance(row.TSTZ, datetime.datetime)
+                    self.assertIsNotNone(row.TSTZ.tzinfo)
+        # Default is null
+        status, row = self.db.insertRow("DT_TYPES", ID=5)
+        self.assertIsNone(row.TSTZ)
+        trans.end()
+
+    def test_date_roundtrip_persistent(self):
+        """Test that date values survive commit and re-read."""
+        import datetime
+        status, trans = self.db.startUpdate()
+        status, row = self.db.insertRow("DT_TYPES", ID=1, D=datetime.date(2025, 6, 15))
+        self.assertEqual(status, Status.Okay)
+        trans.end()
+
+        status, trans = self.db.startRead()
+        status, cursor = self.db.getRows("DT_TYPES")
+        self.assertEqual(status, Status.Okay)
+        status = cursor.moveToFirst()
+        self.assertEqual(status, Status.Okay)
+        self.assertEqual(cursor.D, datetime.date(2025, 6, 15))
+        trans.end()
+
+    def test_timestamp_tz_roundtrip_persistent(self):
+        """Test that timestamp with timezone survives commit and re-read."""
+        import datetime
+        tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+        val = datetime.datetime(2025, 4, 9, 10, 30, 45, 123400, tzinfo=tz)
+        status, trans = self.db.startUpdate()
+        status, row = self.db.insertRow("DT_TYPES", ID=1, TSTZ=val)
+        self.assertEqual(status, Status.Okay)
+        trans.end()
+
+        status, trans = self.db.startRead()
+        status, cursor = self.db.getRows("DT_TYPES")
+        self.assertEqual(status, Status.Okay)
+        status = cursor.moveToFirst()
+        self.assertEqual(status, Status.Okay)
+        self.assertEqual(cursor.TSTZ, val)
+        self.assertEqual(cursor.TSTZ.tzinfo, tz)
+        trans.end()
+
+    def test_time_microsecond_precision(self):
+        """Test that sub-100us values are truncated to RDM's 1/10000s precision."""
+        import datetime
+        status, trans = self.db.startUpdate()
+        # 123456 us -> fraction 1234 -> round-trip as 123400 us
+        status, row = self.db.insertRow("DT_TYPES", ID=1, T=datetime.time(1, 2, 3, 123456))
+        self.assertEqual(status, Status.Okay)
+        self.assertEqual(row.T, datetime.time(1, 2, 3, 123400))
+        trans.end()
+
+
 if __name__ == '__main__':
     unittest.main()

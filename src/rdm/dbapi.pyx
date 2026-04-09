@@ -16,6 +16,24 @@ from cpython.bytes cimport PyBytes_FromStringAndSize
 from typing import Tuple
 from libc.string cimport memset
 import uuid as _uuid_mod
+import datetime as _datetime_mod
+
+cdef extern from "rdmdatetimetypes.h":
+    ctypedef uint32_t RDM_PACKED_DATE_T
+    ctypedef uint32_t RDM_PACKED_TIME_T
+
+    ctypedef struct RDM_PACKED_TIMESTAMP_T:
+        RDM_PACKED_DATE_T date
+        RDM_PACKED_TIME_T time
+
+    ctypedef struct RDM_PACKED_TIMETZ_T:
+        RDM_PACKED_TIME_T time
+        int16_t tz
+
+    ctypedef struct RDM_PACKED_TIMESTAMPTZ_T:
+        RDM_PACKED_DATE_T date
+        RDM_PACKED_TIME_T time
+        int16_t tz
 
 cdef extern from "rdmbcdtypes.h":
     ctypedef struct RDM_BCD_T:
@@ -238,6 +256,130 @@ cdef class StructWrapper (RdmCursor):
         for i in range(6):
             u.node[i] = node_bytes[i]
 
+    cdef object _get_date(self, size_t offset):
+        """Read an RDM_PACKED_DATE_T and return a datetime.date."""
+        cdef uint32_t packed = (<uint32_t*>(self.buffer + offset))[0]
+        return _datetime_mod.date.fromordinal(packed)
+
+    cdef void _set_date(self, size_t offset, object value):
+        """Write a datetime.date into the buffer as RDM_PACKED_DATE_T."""
+        if not isinstance(value, _datetime_mod.date):
+            raise TypeError("Expected a datetime.date")
+        (<uint32_t*>(self.buffer + offset))[0] = <uint32_t>(value.toordinal())
+
+    cdef object _get_time(self, size_t offset):
+        """Read an RDM_PACKED_TIME_T and return a datetime.time."""
+        cdef uint32_t packed = (<uint32_t*>(self.buffer + offset))[0]
+        cdef uint32_t fraction = packed % 10000
+        cdef uint32_t total_seconds = packed // 10000
+        cdef uint16_t second = total_seconds % 60
+        cdef uint32_t total_minutes = total_seconds // 60
+        cdef uint16_t minute = total_minutes % 60
+        cdef uint16_t hour = total_minutes // 60
+        return _datetime_mod.time(hour, minute, second, fraction * 100)
+
+    cdef void _set_time(self, size_t offset, object value):
+        """Write a datetime.time into the buffer as RDM_PACKED_TIME_T."""
+        if not isinstance(value, _datetime_mod.time):
+            raise TypeError("Expected a datetime.time")
+        cdef uint32_t packed = (<uint32_t>(value.hour) * 3600 + <uint32_t>(value.minute) * 60 + <uint32_t>(value.second)) * 10000 + <uint32_t>(value.microsecond) // 100
+        (<uint32_t*>(self.buffer + offset))[0] = packed
+
+    cdef object _get_time_tz(self, size_t offset):
+        """Read an RDM_PACKED_TIMETZ_T and return a datetime.time with tzinfo.
+
+        The buffer stores UTC time + tz offset.  We add the offset to
+        obtain local time, using a dummy date to handle midnight wrap.
+        """
+        cdef RDM_PACKED_TIMETZ_T* t = <RDM_PACKED_TIMETZ_T*>(self.buffer + offset)
+        cdef uint32_t packed = t.time
+        cdef uint32_t fraction = packed % 10000
+        cdef uint32_t total_seconds = packed // 10000
+        cdef uint16_t second = total_seconds % 60
+        cdef uint32_t total_minutes = total_seconds // 60
+        cdef uint16_t minute = total_minutes % 60
+        cdef uint16_t hour = total_minutes // 60
+        cdef object tz_delta = _datetime_mod.timedelta(minutes=t.tz)
+        cdef object tz = _datetime_mod.timezone(tz_delta)
+        cdef object utc_dt = _datetime_mod.datetime(2000, 1, 1, hour, minute, second, fraction * 100)
+        cdef object local_dt = utc_dt + tz_delta
+        return local_dt.time().replace(tzinfo=tz)
+
+    cdef void _set_time_tz(self, size_t offset, object value):
+        """Write a datetime.time with tzinfo into the buffer as RDM_PACKED_TIMETZ_T.
+
+        Converts local time to UTC before storing.
+        """
+        if not isinstance(value, _datetime_mod.time):
+            raise TypeError("Expected a datetime.time")
+        cdef RDM_PACKED_TIMETZ_T* t = <RDM_PACKED_TIMETZ_T*>(self.buffer + offset)
+        cdef int tz_minutes = 0
+        if value.tzinfo is not None:
+            tz_minutes = int(value.utcoffset().total_seconds()) // 60
+        cdef object local_dt = _datetime_mod.datetime(2000, 1, 1, value.hour, value.minute, value.second, value.microsecond)
+        cdef object utc_dt = local_dt - _datetime_mod.timedelta(minutes=tz_minutes)
+        t.time = (<uint32_t>(utc_dt.hour) * 3600 + <uint32_t>(utc_dt.minute) * 60 + <uint32_t>(utc_dt.second)) * 10000 + <uint32_t>(utc_dt.microsecond) // 100
+        t.tz = <int16_t>tz_minutes
+
+    cdef object _get_timestamp(self, size_t offset):
+        """Read an RDM_PACKED_TIMESTAMP_T and return a datetime.datetime."""
+        cdef RDM_PACKED_TIMESTAMP_T* ts = <RDM_PACKED_TIMESTAMP_T*>(self.buffer + offset)
+        cdef object d = _datetime_mod.date.fromordinal(ts.date)
+        cdef uint32_t packed = ts.time
+        cdef uint32_t fraction = packed % 10000
+        cdef uint32_t total_seconds = packed // 10000
+        cdef uint16_t second = total_seconds % 60
+        cdef uint32_t total_minutes = total_seconds // 60
+        cdef uint16_t minute = total_minutes % 60
+        cdef uint16_t hour = total_minutes // 60
+        return _datetime_mod.datetime(d.year, d.month, d.day, hour, minute, second, fraction * 100)
+
+    cdef void _set_timestamp(self, size_t offset, object value):
+        """Write a datetime.datetime into the buffer as RDM_PACKED_TIMESTAMP_T."""
+        if not isinstance(value, _datetime_mod.datetime):
+            raise TypeError("Expected a datetime.datetime")
+        cdef RDM_PACKED_TIMESTAMP_T* ts = <RDM_PACKED_TIMESTAMP_T*>(self.buffer + offset)
+        ts.date = <uint32_t>(value.toordinal())
+        ts.time = (<uint32_t>(value.hour) * 3600 + <uint32_t>(value.minute) * 60 + <uint32_t>(value.second)) * 10000 + <uint32_t>(value.microsecond) // 100
+
+    cdef object _get_timestamp_tz(self, size_t offset):
+        """Read an RDM_PACKED_TIMESTAMPTZ_T and return a datetime.datetime with tzinfo.
+
+        The buffer stores UTC date/time + tz offset.  We add the offset
+        to obtain local date/time (which may shift the date by +-1 day
+        when crossing midnight).
+        """
+        cdef RDM_PACKED_TIMESTAMPTZ_T* ts = <RDM_PACKED_TIMESTAMPTZ_T*>(self.buffer + offset)
+        cdef object d = _datetime_mod.date.fromordinal(ts.date)
+        cdef uint32_t packed = ts.time
+        cdef uint32_t fraction = packed % 10000
+        cdef uint32_t total_seconds = packed // 10000
+        cdef uint16_t second = total_seconds % 60
+        cdef uint32_t total_minutes = total_seconds // 60
+        cdef uint16_t minute = total_minutes % 60
+        cdef uint16_t hour = total_minutes // 60
+        cdef object tz_delta = _datetime_mod.timedelta(minutes=ts.tz)
+        cdef object tz = _datetime_mod.timezone(tz_delta)
+        cdef object utc_dt = _datetime_mod.datetime(d.year, d.month, d.day, hour, minute, second, fraction * 100)
+        cdef object local_dt = utc_dt + tz_delta
+        return local_dt.replace(tzinfo=tz)
+
+    cdef void _set_timestamp_tz(self, size_t offset, object value):
+        """Write a datetime.datetime with tzinfo into the buffer as RDM_PACKED_TIMESTAMPTZ_T.
+
+        Converts local date/time to UTC before storing.
+        """
+        if not isinstance(value, _datetime_mod.datetime):
+            raise TypeError("Expected a datetime.datetime")
+        cdef RDM_PACKED_TIMESTAMPTZ_T* ts = <RDM_PACKED_TIMESTAMPTZ_T*>(self.buffer + offset)
+        cdef int tz_minutes = 0
+        if value.tzinfo is not None:
+            tz_minutes = int(value.utcoffset().total_seconds()) // 60
+        cdef object utc_dt = value.replace(tzinfo=None) - _datetime_mod.timedelta(minutes=tz_minutes)
+        ts.date = <uint32_t>(utc_dt.toordinal())
+        ts.time = (<uint32_t>(utc_dt.hour) * 3600 + <uint32_t>(utc_dt.minute) * 60 + <uint32_t>(utc_dt.second)) * 10000 + <uint32_t>(utc_dt.microsecond) // 100
+        ts.tz = <int16_t>tz_minutes
+
     cpdef object _get_field(self, str name):
         """Get the value of a field based on its name and type."""
         cdef dict info = self.__class__._field_info[name]
@@ -315,7 +457,17 @@ cdef class StructWrapper (RdmCursor):
             return <object>py_dec
         elif type_ == UUID:
             return self._get_uuid(offset)
-        elif type_ in [DATE, TIME, TIME_TZ, TIMESTAMP, TIMESTAMP_TZ, ROWID]:
+        elif type_ == DATE:
+            return self._get_date(offset)
+        elif type_ == TIME:
+            return self._get_time(offset)
+        elif type_ == TIME_TZ:
+            return self._get_time_tz(offset)
+        elif type_ == TIMESTAMP:
+            return self._get_timestamp(offset)
+        elif type_ == TIMESTAMP_TZ:
+            return self._get_timestamp_tz(offset)
+        elif type_ == ROWID:
             return False
         elif type_ in [CHAR, VARCHAR]:
             start = self.buffer + offset
@@ -467,7 +619,17 @@ cdef class StructWrapper (RdmCursor):
                 raise ValueError ("Failed to convert to BCD")
         elif type_ == UUID:
             self._set_uuid(offset, value)
-        elif type_ in [DATE, TIME, TIME_TZ, TIMESTAMP, TIMESTAMP_TZ, ROWID]:
+        elif type_ == DATE:
+            self._set_date(offset, value)
+        elif type_ == TIME:
+            self._set_time(offset, value)
+        elif type_ == TIME_TZ:
+            self._set_time_tz(offset, value)
+        elif type_ == TIMESTAMP:
+            self._set_timestamp(offset, value)
+        elif type_ == TIMESTAMP_TZ:
+            self._set_timestamp_tz(offset, value)
+        elif type_ == ROWID:
             pass  # Only handle nullability for now
         elif type_ in [CHAR, VARCHAR]:
             py_bytes = value.encode('utf-8')
