@@ -468,7 +468,7 @@ cdef class StructWrapper (RdmCursor):
         elif type_ == TIMESTAMP_TZ:
             return self._get_timestamp_tz(offset)
         elif type_ == ROWID:
-            return False
+            return (<uint64_t*>(self.buffer + offset))[0]
         elif type_ in [CHAR, VARCHAR]:
             start = self.buffer + offset
             end = <char*>memchr(start, 0, size)
@@ -630,7 +630,11 @@ cdef class StructWrapper (RdmCursor):
         elif type_ == TIMESTAMP_TZ:
             self._set_timestamp_tz(offset, value)
         elif type_ == ROWID:
-            pass  # Only handle nullability for now
+            if array_elements > 0:
+                raise ValueError("ROWID does not support arrays")
+            if not isinstance(value, int):
+                raise TypeError("Expected an integer for ROWID")
+            (<uint64_t*>(self.buffer + offset))[0] = value
         elif type_ in [CHAR, VARCHAR]:
             py_bytes = value.encode('utf-8')
             length = len(py_bytes)
