@@ -15,10 +15,20 @@ from cpython.bytes cimport PyBytes_FromStringAndSize
 
 from typing import Tuple
 from libc.string cimport memset
+import uuid as _uuid_mod
 
 cdef extern from "rdmbcdtypes.h":
     ctypedef struct RDM_BCD_T:
         pass
+
+cdef extern from "rdmuuidtypes.h":
+    ctypedef struct RDM_UUID_T:
+        uint32_t time_low
+        uint16_t time_mid
+        uint16_t time_high_and_version
+        uint8_t clock_seq_high_and_reserved
+        uint8_t clock_seq_low
+        uint8_t node[6]
 
 cdef extern from "rdmdbapi.h":
     RDM_RETCODE rdm_dbCloseRollback(RDM_DB db) nogil
@@ -140,6 +150,12 @@ cdef extern from "db_ud_type.h" namespace "RDM::RUNTIME":
 from libc.stdlib cimport malloc, free
 from libc.string cimport memchr
 
+cdef extern from "<arpa/inet.h>" nogil:
+    uint32_t ntohl(uint32_t netlong)
+    uint16_t ntohs(uint16_t netshort)
+    uint32_t htonl(uint32_t hostlong)
+    uint16_t htons(uint16_t hostshort)
+
 cdef class StructWrapper (RdmCursor):
     cdef char* buffer
     cdef size_t size
@@ -182,6 +198,45 @@ cdef class StructWrapper (RdmCursor):
             return 0
         import math
         return int(math.log2(m + 1))
+
+    cdef object _get_uuid(self, size_t offset):
+        """Read an RDM_UUID_T from the buffer and return a Python uuid.UUID.
+
+        RDM stores time_low (uint32), time_mid (uint16), and
+        time_high_and_version (uint16) in network byte order (big-endian).
+        We convert them to host order before passing to uuid.UUID(fields=...).
+        The remaining fields (clock_seq and node) are single bytes so they
+        are byte-order neutral.
+        """
+        cdef RDM_UUID_T* u = <RDM_UUID_T*>(self.buffer + offset)
+        return _uuid_mod.UUID(fields=(
+            ntohl(u.time_low),
+            ntohs(u.time_mid),
+            ntohs(u.time_high_and_version),
+            u.clock_seq_high_and_reserved,
+            u.clock_seq_low,
+            int.from_bytes(u.node[:6], byteorder='big'),
+        ))
+
+    cdef void _set_uuid(self, size_t offset, object value):
+        """Write a Python uuid.UUID into the buffer as RDM_UUID_T.
+
+        Accepts a uuid.UUID or a string that uuid.UUID can parse.
+        Converts the first three fields from host order to network byte
+        order (big-endian) before writing.
+        """
+        cdef RDM_UUID_T* u = <RDM_UUID_T*>(self.buffer + offset)
+        if not isinstance(value, _uuid_mod.UUID):
+            value = _uuid_mod.UUID(value)
+        u.time_low = htonl(value.time_low)
+        u.time_mid = htons(value.time_mid)
+        u.time_high_and_version = htons(value.time_hi_version)
+        u.clock_seq_high_and_reserved = value.clock_seq_hi_variant
+        u.clock_seq_low = value.clock_seq_low
+        cdef bytes node_bytes = value.node.to_bytes(6, byteorder='big')
+        cdef size_t i
+        for i in range(6):
+            u.node[i] = node_bytes[i]
 
     cpdef object _get_field(self, str name):
         """Get the value of a field based on its name and type."""
@@ -258,7 +313,9 @@ cdef class StructWrapper (RdmCursor):
             if rc != 0:
                 raise  ValueError ("Failed to convert to decimal")
             return <object>py_dec
-        elif type_ in [DATE, TIME, TIME_TZ, TIMESTAMP, TIMESTAMP_TZ, ROWID, UUID]:
+        elif type_ == UUID:
+            return self._get_uuid(offset)
+        elif type_ in [DATE, TIME, TIME_TZ, TIMESTAMP, TIMESTAMP_TZ, ROWID]:
             return False
         elif type_ in [CHAR, VARCHAR]:
             start = self.buffer + offset
@@ -408,7 +465,9 @@ cdef class StructWrapper (RdmCursor):
             rc = decimal_to_bcd(<PyObject *>value, <RDM_BCD_T *>(self.buffer + offset))
             if rc != 0:
                 raise ValueError ("Failed to convert to BCD")
-        elif type_ in [DATE, TIME, TIME_TZ, TIMESTAMP, TIMESTAMP_TZ, ROWID, UUID]:
+        elif type_ == UUID:
+            self._set_uuid(offset, value)
+        elif type_ in [DATE, TIME, TIME_TZ, TIMESTAMP, TIMESTAMP_TZ, ROWID]:
             pass  # Only handle nullability for now
         elif type_ in [CHAR, VARCHAR]:
             py_bytes = value.encode('utf-8')

@@ -18,6 +18,7 @@ from builtins import ValueError
 import numpy as np
 import decimal
 from decimal import Decimal
+import uuid
 
 class TestDataTypes(unittest.TestCase):
     def setUp(self):
@@ -47,7 +48,8 @@ class TestDataTypes(unittest.TestCase):
                 c char default 'A' not null,
                 c10 char(10) default 'abcdefghij',
                 vc varchar(10) default 'test' not null,
-                vc_octet varchar(10 octets) default 'octet' not null
+                vc_octet varchar(10 octets) default 'octet' not null,
+                uid uuid default null
             );
         """)
         self.assertEqual(status, Status.Okay, "Failed to set catalog")
@@ -238,6 +240,36 @@ class TestDataTypes(unittest.TestCase):
             self.db.insertRow("DATA_TYPES", ID=6, VC=None)
         status, row = self.db.insertRow("DATA_TYPES", ID=7)  # Test default
         self.assertEqual(row.VC, 'test')
+        trans.end()
+
+    # Test uuid type
+    def test_uuid(self):
+        status, trans = self.db.startUpdate()
+        test_uuid = uuid.UUID('12345678-1234-5678-1234-567812345678')
+        nil_uuid = uuid.UUID(int=0)
+        max_uuid = uuid.UUID('ffffffff-ffff-ffff-ffff-ffffffffffff')
+        values = [
+            (1, test_uuid),
+            (2, nil_uuid),
+            (3, max_uuid),
+            (4, None),  # Test null
+        ]
+        for id_val, val in values:
+            with self.subTest(value=val):
+                status, row = self.db.insertRow("DATA_TYPES", ID=id_val, UID=val)
+                self.assertEqual(status, Status.Okay)
+                if val is None:
+                    self.assertIsNone(row.UID)
+                else:
+                    self.assertEqual(row.UID, val)
+                    self.assertIsInstance(row.UID, uuid.UUID)
+        # Test default (null)
+        status, row = self.db.insertRow("DATA_TYPES", ID=5)
+        self.assertIsNone(row.UID)
+        # Test round-trip with string input
+        status, row = self.db.insertRow("DATA_TYPES", ID=6, UID='12345678-1234-5678-1234-567812345678')
+        self.assertEqual(status, Status.Okay)
+        self.assertEqual(row.UID, test_uuid)
         trans.end()
 
     # Test varchar(10 octets) type
