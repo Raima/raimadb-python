@@ -19,6 +19,8 @@ class TestCompileCatalog(DbTestBase):
         """alterCatalog with valid DDL returns Okay."""
         # The Python row class won't reflect the new column in the same session,
         # but the DDL is accepted and committed successfully.
+        # TBD: The above stated behavior is a bug and should be fixed;
+        # the test should verify that the new column is usable after alterCatalog.
         _, trans = self.db.startSchemaUpdate()
         status = self.db.alterCatalog("alter table t add column extra int;")
         self.assertEqual(status, Status.Okay)

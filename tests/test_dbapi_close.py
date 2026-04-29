@@ -38,10 +38,8 @@ class TestClose(DbTestBase):
         self.assertEqual(status, Status.Okay)
         status, _ = self.db.insertRow("T", ID=1, VAL=10)
         self.assertEqual(status, Status.Okay)
-        # closeRollback should discard the uncommitted transaction
-        # RDM returns TrAborted when closing with an active transaction
         status = self.db.closeRollback()
-        self.assertIn(status, (Status.Okay, Status.TrAborted))
+        self.assertIn(status, (Status.Okay, Status.TrAborted)) # TBD: Change this to only expect Okay
         # Re-open and verify no data was committed
         status = self.db.open(self.DB_NAME, OpenMode.SHARED)
         self.assertEqual(status, Status.Okay)
