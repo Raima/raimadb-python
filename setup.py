@@ -135,7 +135,9 @@ modules = [
     ("rdm.encryptapi",        [],                         ["rdmenc"]),
     ("rdm.cursorapi",         [],                         ["rdmrdm"]),
     ("rdm.transapi",          [],                         ["rdmrdm"]),
-    ("rdm.dbapi",             ["src/rdm/bcd_convert.cpp"], ["rdmrdm"]),
+    ("rdm._structwrapper",    ["src/rdm/bcd_convert.cpp"], ["rdmrdm"]),
+    ("rdm._schemabuilder",    [],                         ["rdmrdm"]),
+    ("rdm.dbapi",             [],                         ["rdmrdm"]),
     ("rdm.tfsapi",            [],                         ["rdmrdm", "rdmtfs_rdm"]),
     ("rdm.rdmapi",            [],                         ["rdmrdm"]),
 ]
