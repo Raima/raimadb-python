@@ -26,6 +26,7 @@ cdef extern from "rdmtypes.h":
     ctypedef uint32_t RDM_REF_ID
     ctypedef uint64_t RDM_TX
     ctypedef uint8_t RDM_HAS_VALUE_T
+    ctypedef uint64_t RDM_ROWID_T
 
     cdef enum RDM_RTREE_TYPE:
         RDM_RTREE_ALL
@@ -64,7 +65,7 @@ cdef extern from "rdmtypes.h":
         RDM_LOCK_SNAPSHOT
         RDM_LOCK_CATALOG
 
-    cdef enum RDM_CURSOR_STATUS:
+    ctypedef enum RDM_CURSOR_STATUS:
         CURSOR_NOT_AT_ROW
         CURSOR_AT_ROW
         CURSOR_BETWEEN
@@ -87,7 +88,7 @@ cdef extern from "rdmtypes.h":
         RDM_OPEN_REPLICATE_SOURCE
         RDM_OPEN_REPLICATE_TARGET
 
-    cdef enum RDM_CURSOR_TYPE:
+    ctypedef enum RDM_CURSOR_TYPE:
         CURSOR_TYPE_UNKNOWN
         CURSOR_TYPE_BEFORE_FIRST
         CURSOR_TYPE_AFTER_LAST
