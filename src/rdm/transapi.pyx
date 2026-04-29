@@ -19,7 +19,7 @@ cdef class RdmTrans(_ValidateTrans):
                 rc = rdm_transEnd(self.trans)
             self.trans = NULL
             db = self.db()
-            db.end(self, True)
+            db._chainEnd(self, True)
         return factory.handleCode(rc)
 
     def endRollback(self):
@@ -29,7 +29,7 @@ cdef class RdmTrans(_ValidateTrans):
                 rc = rdm_transEndRollback(self.trans)
             self.trans = NULL
             db = self.db()
-            db.end(self, True)
+            db._chainEnd(self, True)
         return factory.handleCode(rc)
 
     def rollback(self):
@@ -39,5 +39,5 @@ cdef class RdmTrans(_ValidateTrans):
                 rc = rdm_transRollback(self.trans)
             self.trans = NULL
             db = self.db()
-            db.end(self, False)
+            db._chainEnd(self, False)
         return factory.handleCode(rc)

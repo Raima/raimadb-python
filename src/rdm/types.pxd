@@ -42,7 +42,7 @@ cdef extern from "rdmtypes.h":
         RDM_RANGE_OPEN
         RDM_RANGE_CLOSED
 
-    cdef enum RDM_TRANS_STATUS:
+    ctypedef enum RDM_TRANS_STATUS:
         RDM_TRANS_READ
         RDM_TRANS_UPDATE
         RDM_TRANS_SNAPSHOT
@@ -57,7 +57,7 @@ cdef extern from "rdmtypes.h":
         RDM_U_EMPTY
         RDM_U_LIVE
 
-    cdef enum RDM_LOCK_STATUS:
+    ctypedef enum RDM_LOCK_STATUS:
         RDM_LOCK_FREE
         RDM_LOCK_READ
         RDM_LOCK_WRITE

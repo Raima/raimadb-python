@@ -6,7 +6,8 @@ from libcpp cimport bool
 from libc.stddef cimport size_t
 from libc.stdlib cimport malloc, free
 from .tfstypes cimport RDM_TFS
-from .types cimport RDM_CURSOR, RDM_ENCRYPT, RDM_TABLE_ID, RDM_LOCK_ALL
+from .types cimport RDM_CURSOR, RDM_ENCRYPT, RDM_TABLE_ID, RDM_LOCK_ALL, RDM_LOCK_SCHEMA
+from .types cimport RDM_TRANS_STATUS, RDM_TRANS_READ, RDM_TRANS_UPDATE, RDM_TRANS_SNAPSHOT
 from .retcodetypes cimport RDM_RETCODE, sOKAY, eINVFCNSEQ
 from .exceptions_factory import factory
 
@@ -25,7 +26,7 @@ cdef extern from "rdmdbapi.h":
     RDM_RETCODE rdm_dbAllocCursor (RDM_DB db, RDM_CURSOR *pCursor) nogil
     RDM_RETCODE rdm_dbStartUpdate (RDM_DB db, const RDM_TABLE_ID *, int, const RDM_TABLE_ID *, int, RDM_TRANS *pTrans) nogil
     RDM_RETCODE rdm_dbStartRead (RDM_DB db, void *, int, RDM_TRANS *pTrans) nogil
-    RDM_RETCODE rdm_dbStartSnapshoot (RDM_DB db, void *, int, RDM_TRANS *pTrans) nogil
+    RDM_RETCODE rdm_dbStartSnapshot (RDM_DB db, const RDM_TABLE_ID *, int, RDM_TRANS *pTrans) nogil
 cdef extern from "rdmcursorapi.h":
     RDM_RETCODE rdm_cursorFree(RDM_CURSOR cursor) nogil
 cdef extern from "rdmtransapi.h":
@@ -112,7 +113,7 @@ cdef class _ValidateDb:
             with nogil:
                 rdm_dbFreeRollback (self.db)
 
-    def end(self, _ValidateTrans target, bool inclusive):
+    def _chainEnd(self, _ValidateTrans target, bool inclusive):
         cdef _ValidateTrans new_last
         if inclusive:
             if target.prevTrans is not None:
@@ -201,7 +202,7 @@ cdef class _ValidateCursor:
         return rc
 
 cdef class _ValidateTrans:
-    def __init__(self, _ValidateDb db, bool update, token):
+    def __init__(self, _ValidateDb db, RDM_TRANS_STATUS mode, token):
         cdef RDM_RETCODE rc
         if token is not _token:
             raise TypeError("This class cannot be instantiated directly. Please use a start method, such as rdm.dbapi.RdmDb.startRead()")
@@ -210,12 +211,20 @@ cdef class _ValidateTrans:
             self.db = weakref.ref(db)
             self.prevTrans = db.lastTrans
             db.lastTrans = weakref.ref(self)
-            if (update):
+            if mode == RDM_TRANS_UPDATE:
                 with nogil:
                     rc = rdm_dbStartUpdate(db.db, RDM_LOCK_ALL, 0, RDM_LOCK_ALL, 0, &self.trans)
-            else:
+            elif mode == RDM_TRANS_READ:
                 with nogil:
                     rc = rdm_dbStartRead(db.db, RDM_LOCK_ALL, 0, &self.trans)
+            elif mode == RDM_TRANS_SNAPSHOT:
+                with nogil:
+                    rc = rdm_dbStartSnapshot(db.db, RDM_LOCK_ALL, 0, &self.trans)
+            elif <int> mode == 100:  # RDM_TRANS_SCHEMA_UPDATE: lock schema for alterCatalog
+                with nogil:
+                    rc = rdm_dbStartUpdate(db.db, RDM_LOCK_SCHEMA, 1, RDM_LOCK_ALL, 0, &self.trans)
+            else:
+                raise ValueError("Invalid transaction mode")
         factory.handleCode(rc)
 
     def __dealloc__(self):

@@ -3,6 +3,7 @@
 from .types cimport RDM_DB, RDM_CURSOR, RDM_RETCODE, RDM_OPEN_MODE, RDM_TABLE_ID, RDM_KEY_ID
 from .types cimport RDM_TRANS_STATUS, RDM_TRANS_READ, RDM_TRANS_UPDATE, RDM_TRANS_SNAPSHOT
 from .types cimport RDM_LOCK_STATUS, RDM_ENCRYPT
+from .types cimport RDM_LOCK_SCHEMA
 from .tfstypes cimport TFS_TYPE, RDM_TFS
 from .exceptions_factory import factory
 from .retcodetypes import Status
@@ -128,6 +129,14 @@ cdef class RdmDb(_ValidateDb):
             trans = RdmTrans(self, RDM_TRANS_SNAPSHOT, _token)
         return factory.handleCode(rc), trans
 
+    def startSchemaUpdate(self) -> Tuple[Status, RdmTrans]:
+        """Start an update transaction with a write lock on the schema (for alterCatalog)."""
+        cdef RdmTrans trans = None
+        rc = self._validate()
+        if rc == sOKAY:
+            trans = RdmTrans(self, <RDM_TRANS_STATUS> 100, _token)  # 100 = schema update mode
+        return factory.handleCode(rc), trans
+
     def insertRow(self, str table_name, **kwargs):
         """Insert a row of a given table with attributes for each column"""
         cdef table_class = self._tables[table_name]
@@ -182,3 +191,389 @@ cdef class RdmDb(_ValidateDb):
     def getKey(self, str table_name, str key_name):
         """Get a row class with attributes for each column"""
         return self._keys[table_name, key_name]
+
+    # ------------------------------------------------------------------
+    # Catalog management
+    # ------------------------------------------------------------------
+    def setCatalogFromFile(self, str catfile) -> Status:
+        """Set the catalog from a catalog file."""
+        cdef bytes b = catfile.encode('utf-8')
+        rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbSetCatalogFromFile(self.db, b)
+        return factory.handleCode(rc)
+
+    def compileCatalog(self, str schema) -> Status:
+        """Compile a DDL schema string into the catalog."""
+        cdef bytes b = schema.encode('utf-8')
+        rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbCompileCatalog(self.db, b)
+        return factory.handleCode(rc)
+
+    def compileCatalogFromFile(self, str schemafile) -> Status:
+        """Compile a DDL schema file into the catalog."""
+        cdef bytes b = schemafile.encode('utf-8')
+        rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbCompileCatalogFromFile(self.db, b)
+        return factory.handleCode(rc)
+
+    def loadCatalog(self, bytes catalog) -> Status:
+        """Load a pre-compiled binary catalog."""
+        rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbLoadCatalog(self.db, catalog)
+        return factory.handleCode(rc)
+
+    def loadCatalogFromFile(self, str catfile) -> Status:
+        """Load a pre-compiled catalog from a file."""
+        cdef bytes b = catfile.encode('utf-8')
+        rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbLoadCatalogFromFile(self.db, b)
+        return factory.handleCode(rc)
+
+    def alterCatalog(self, str ddlStmt) -> Status:
+        """Alter the catalog using a DDL statement."""
+        cdef bytes b = ddlStmt.encode('utf-8')
+        rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbAlterCatalog(self.db, b)
+        return factory.handleCode(rc)
+
+    # ------------------------------------------------------------------
+    # Options
+    # ------------------------------------------------------------------
+    def setOption(self, str keyword, str value) -> Status:
+        """Set a single option by keyword."""
+        cdef bytes b_keyword = keyword.encode('utf-8')
+        cdef bytes b_value = value.encode('utf-8')
+        rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbSetOption(self.db, b_keyword, b_value)
+        return factory.handleCode(rc)
+
+    def setOptions(self, str optString) -> Status:
+        """Set options from a key=value string."""
+        cdef bytes b = optString.encode('utf-8')
+        rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbSetOptions(self.db, b)
+        return factory.handleCode(rc)
+
+    def getOption(self, str keyword) -> Tuple[Status, str]:
+        """Get a single option by keyword."""
+        cdef bytes b_keyword = keyword.encode('utf-8')
+        cdef size_t needed = 0
+        cdef char *buf = NULL
+        cdef RDM_RETCODE rc = self._validate()
+        cdef str result = ""
+        if rc == sOKAY:
+            rc = rdm_dbGetOption(self.db, b_keyword, NULL, 0, &needed)
+            if rc == sOKAY and needed > 0:
+                buf = <char *> malloc(needed)
+                if buf == NULL:
+                    raise MemoryError()
+                try:
+                    rc = rdm_dbGetOption(self.db, b_keyword, buf, needed, NULL)
+                    if rc == sOKAY:
+                        result = buf[:needed].decode('utf-8').rstrip('\x00')
+                finally:
+                    free(buf)
+        return factory.handleCode(rc), result
+
+    def getOptions(self) -> Tuple[Status, str]:
+        """Get all options as a key=value string."""
+        cdef size_t needed = 0
+        cdef char *buf = NULL
+        cdef RDM_RETCODE rc = self._validate()
+        cdef str result = ""
+        if rc == sOKAY:
+            rc = rdm_dbGetOptions(self.db, NULL, 0, &needed)
+            if rc == sOKAY and needed > 0:
+                buf = <char *> malloc(needed)
+                if buf == NULL:
+                    raise MemoryError()
+                try:
+                    rc = rdm_dbGetOptions(self.db, buf, needed, NULL)
+                    if rc == sOKAY:
+                        result = buf[:needed].decode('utf-8').rstrip('\x00')
+                finally:
+                    free(buf)
+        return factory.handleCode(rc), result
+
+    def clearCache(self) -> Status:
+        """Clear the in-memory cache."""
+        rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbClearCache(self.db)
+        return factory.handleCode(rc)
+
+    # ------------------------------------------------------------------
+    # Transaction control
+    # ------------------------------------------------------------------
+    def end(self) -> Status:
+        """Commit the active transaction and release locks."""
+        cdef RDM_RETCODE rc = self._validate()
+        if rc == sOKAY:
+            with nogil:
+                rc = rdm_dbEnd(self.db)
+            (<_ValidateDb>self)._chainEnd(None, False)
+        return factory.handleCode(rc)
+
+    def endRollback(self) -> Status:
+        """Roll back the active transaction and release locks."""
+        cdef RDM_RETCODE rc = self._validate()
+        if rc == sOKAY:
+            with nogil:
+                rc = rdm_dbEndRollback(self.db)
+            (<_ValidateDb>self)._chainEnd(None, False)
+        return factory.handleCode(rc)
+
+    def precommit(self) -> Status:
+        """Two-phase precommit of the active transaction."""
+        cdef RDM_RETCODE rc = self._validate()
+        if rc == sOKAY:
+            with nogil:
+                rc = rdm_dbPrecommit(self.db)
+        return factory.handleCode(rc)
+
+    def getLockStatus(self, str table_name) -> Tuple[Status, int]:
+        """Query the lock status for a table."""
+        cdef RDM_LOCK_STATUS status = <RDM_LOCK_STATUS> 0
+        cdef RDM_RETCODE rc = sOKAY
+        cdef table_class
+        try:
+            table_class = self._tables[table_name]
+        except KeyError:
+            rc = eINVTABID
+        if rc == sOKAY:
+            rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbGetLockStatus(self.db, table_class._table_id, &status)
+        return factory.handleCode(rc), <int> status
+
+    def getTransactionStatus(self) -> Tuple[Status, int]:
+        """Query the active transaction type."""
+        cdef RDM_TRANS_STATUS status = <RDM_TRANS_STATUS> 0
+        cdef RDM_RETCODE rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbGetTransactionStatus(self.db, &status)
+        return factory.handleCode(rc), <int> status
+
+    def evictRowData(self, str table_name) -> Status:
+        """Evict rows for a table from the runtime cache."""
+        cdef RDM_RETCODE rc = sOKAY
+        cdef table_class
+        try:
+            table_class = self._tables[table_name]
+        except KeyError:
+            rc = eINVTABID
+        if rc == sOKAY:
+            rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbEvictRowData(self.db, table_class._table_id)
+        return factory.handleCode(rc)
+
+    def evictKeyData(self, str table_name, str key_name) -> Status:
+        """Evict key entries for an index from the runtime cache."""
+        cdef RDM_RETCODE rc = sOKAY
+        cdef key_class
+        try:
+            self._tables[table_name]
+            try:
+                key_class = self._keys[table_name, key_name]
+            except KeyError:
+                rc = eINVKEYID
+        except KeyError:
+            rc = eINVTABID
+        if rc == sOKAY:
+            rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbEvictKeyData(self.db, key_class._get_id())
+        return factory.handleCode(rc)
+
+    # ------------------------------------------------------------------
+    # Delete
+    # ------------------------------------------------------------------
+    def deleteAllRowsFromDatabase(self) -> Status:
+        """Delete all rows from every table in the database."""
+        cdef RDM_RETCODE rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbDeleteAllRowsFromDatabase(self.db)
+        return factory.handleCode(rc)
+
+    def deleteAllRowsFromTable(self, str table_name) -> Status:
+        """Delete all rows from the named table."""
+        cdef RDM_RETCODE rc = sOKAY
+        cdef table_class
+        try:
+            table_class = self._tables[table_name]
+        except KeyError:
+            rc = eINVTABID
+        if rc == sOKAY:
+            rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbDeleteAllRowsFromTable(self.db, table_class._table_id)
+        return factory.handleCode(rc)
+
+    # ------------------------------------------------------------------
+    # Information
+    # ------------------------------------------------------------------
+    def getInfo(self, str keyword) -> Tuple[Status, str]:
+        """Get database information as a JSON string."""
+        cdef bytes b_keyword = keyword.encode('utf-8')
+        cdef size_t bufsize = 4096
+        cdef size_t needed = 0
+        cdef char *buf
+        cdef RDM_RETCODE rc = self._validate()
+        cdef str result = ""
+        if rc == sOKAY:
+            buf = <char *> malloc(bufsize)
+            if buf == NULL:
+                raise MemoryError()
+            try:
+                rc = rdm_dbGetInfo(self.db, b_keyword, buf, bufsize, &needed)
+                if rc == sOKAY:
+                    result = buf[:needed].decode('utf-8').rstrip('\x00')
+            finally:
+                free(buf)
+        return factory.handleCode(rc), result
+
+    def getMemoryUsage(self) -> Tuple[Status, dict]:
+        """Get system and user memory usage statistics."""
+        cdef uint64_t systemCurr = 0
+        cdef uint64_t systemMax = 0
+        cdef uint64_t userCurr = 0
+        cdef uint64_t userMax = 0
+        cdef RDM_RETCODE rc = self._validate()
+        cdef dict result = {}
+        if rc == sOKAY:
+            rc = rdm_dbGetMemoryUsage(self.db, &systemCurr, &systemMax, &userCurr, &userMax)
+            if rc == sOKAY:
+                result = {
+                    'systemCurr': systemCurr,
+                    'systemMax': systemMax,
+                    'userCurr': userCurr,
+                    'userMax': userMax,
+                }
+        return factory.handleCode(rc), result
+
+    def getTFS(self):
+        """Get the parent TFS handle for this database."""
+        if self.tfs is None:
+            return None
+        return self.tfs()
+
+    def getTFSType(self) -> Tuple[Status, int]:
+        """Get the TFS type enum."""
+        cdef TFS_TYPE tfsType = <TFS_TYPE> 0
+        cdef RDM_RETCODE rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbGetTFSType(self.db, &tfsType)
+        return factory.handleCode(rc), <int> tfsType
+
+    def findPrimaryKeyIdByTableId(self, str table_name) -> Tuple[Status, int]:
+        """Get the primary key ID for a table."""
+        cdef RDM_KEY_ID keyId = 0
+        cdef RDM_RETCODE rc = sOKAY
+        cdef table_class
+        try:
+            table_class = self._tables[table_name]
+        except KeyError:
+            rc = eINVTABID
+        if rc == sOKAY:
+            rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbFindPrimaryKeyIdByTableId(self.db, table_class._table_id, &keyId)
+        return factory.handleCode(rc), <int> keyId
+
+    def getCertificate(self) -> Tuple[Status, str]:
+        """Get the server's SSL certificate (PEM)."""
+        cdef size_t needed = 0
+        cdef char *buf = NULL
+        cdef RDM_RETCODE rc = self._validate()
+        cdef str result = ""
+        if rc == sOKAY:
+            rc = rdm_dbGetCertificate(self.db, NULL, 0, &needed)
+            if rc == sOKAY and needed > 0:
+                buf = <char *> malloc(needed)
+                if buf == NULL:
+                    raise MemoryError()
+                try:
+                    rc = rdm_dbGetCertificate(self.db, buf, needed, NULL)
+                    if rc == sOKAY:
+                        result = buf[:needed].decode('utf-8').rstrip('\x00')
+                finally:
+                    free(buf)
+        return factory.handleCode(rc), result
+
+    # ------------------------------------------------------------------
+    # Encryption
+    # ------------------------------------------------------------------
+    def setEncrypt(self, _ValidateEncrypt enc) -> Status:
+        """Associate an encryption context with this database handle."""
+        cdef RDM_RETCODE rc = self._validate()
+        if rc == sOKAY:
+            rc = enc._validate()
+        if rc == sOKAY:
+            rc = rdm_dbSetEncrypt(self.db, enc.enc)
+        return factory.handleCode(rc)
+
+    def encrypt(self, _ValidateEncrypt enc, str optString = None) -> Status:
+        """Encrypt, decrypt, or re-encrypt the database."""
+        cdef bytes b_opt
+        cdef const char *c_opt = NULL
+        cdef RDM_RETCODE rc = self._validate()
+        if rc == sOKAY:
+            rc = enc._validate()
+        if rc == sOKAY:
+            if optString is not None:
+                b_opt = optString.encode('utf-8')
+                c_opt = b_opt
+            rc = rdm_dbEncrypt(self.db, enc.enc, c_opt)
+        return factory.handleCode(rc)
+
+    # ------------------------------------------------------------------
+    # Utilities
+    # ------------------------------------------------------------------
+    def vacuum(self, str optString = None) -> Status:
+        """Compact pack files."""
+        cdef bytes b_opt
+        cdef const char *c_opt = NULL
+        cdef RDM_RETCODE rc = self._validate()
+        if rc == sOKAY:
+            if optString is not None:
+                b_opt = optString.encode('utf-8')
+                c_opt = b_opt
+            rc = rdm_dbVacuum(self.db, c_opt)
+        return factory.handleCode(rc)
+
+    def createNewPackFile(self) -> Status:
+        """Force creation of a new pack file."""
+        cdef RDM_RETCODE rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbCreateNewPackFile(self.db)
+        return factory.handleCode(rc)
+
+    def persistInMemory(self) -> Status:
+        """Flush in-memory tables to disk."""
+        cdef RDM_RETCODE rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbPersistInMemory(self.db)
+        return factory.handleCode(rc)
+
+    def tableSetMaxRows(self, str table_name, uint32_t maxrows) -> Status:
+        """Cap the row count on a table."""
+        cdef RDM_RETCODE rc = sOKAY
+        cdef table_class
+        try:
+            table_class = self._tables[table_name]
+        except KeyError:
+            rc = eINVTABID
+        if rc == sOKAY:
+            rc = self._validate()
+        if rc == sOKAY:
+            rc = rdm_dbTableSetMaxRows(self.db, table_class._table_id, maxrows)
+        return factory.handleCode(rc)
