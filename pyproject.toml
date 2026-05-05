@@ -21,7 +21,7 @@ classifiers = [
 where = ["src"]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", "numpy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "examples"]

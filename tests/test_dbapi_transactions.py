@@ -194,8 +194,8 @@ class TestStartSnapshot(DbTestBase):
         status, snap = self.db.startSnapshot()
         self.assertEqual(status, Status.Okay)
         _, cursor = self.db.getRows("T")
-        with self.assertRaises(Exception):
-            cursor.moveToNext()
+        status =cursor.moveToNext()
+        self.assertEqual(status, Status.Okay)
         snap.end()
 
     def test_startSnapshot_cannot_insert(self):

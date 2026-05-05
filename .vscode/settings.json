@@ -1,0 +1,23 @@
+{
+    "python.testing.unittestEnabled": true,
+    "python.testing.unittestArgs": [
+        "-v",
+        "-s",
+        ".",
+        "-p",
+        "test_*.py"
+    ],
+    "python.testing.pytestEnabled": false,
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "files.associations": {
+        "*.pyx": "cython",
+        "*.pxd": "cython"
+    },
+    "chat.tools.terminal.autoApprove": {
+        "/^source \\.venv/bin/activate && python setup\\.py build_ext --inplace 2>&1$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

@@ -33,7 +33,7 @@
             "name": "Run python01 Example",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/examples/python01/python01Example_main.py",
+            "program": "${workspaceFolder}/examples/python01/python01Example.py",
             "cwd": "${workspaceFolder}",
             "justMyCode": false
         }
