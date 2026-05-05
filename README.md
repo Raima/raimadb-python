@@ -16,6 +16,59 @@ git clone https://github.com/Raima/raimadb-python.git
 cd raimadb-python
 ```
 
+## Devcontainer (Recommended for Development)
+
+This repository includes a ready-to-use devcontainer in `.devcontainer/`.
+
+### Host prerequisites
+
+- Docker installed and running (Docker Engine on Linux, Docker Desktop on
+    Windows/macOS)
+- Visual Studio Code
+- Dev Containers extension for VS Code
+
+You can use the devcontainer on Windows, macOS, or Linux hosts. The
+development environment inside the container is always Linux.
+
+### RDM access in the container
+
+The container bind-mounts the host path `/opt/Raima` into the container at the
+same path, read-only.
+
+- Mount mode is read-only so builds/tests cannot modify your host RDM install.
+- If `/opt/Raima` is missing on the host, the container still starts, but RDM
+    dependent install/build steps are skipped.
+
+### Python environment behavior
+
+On container creation, `.devcontainer/postCreate.sh`:
+
+- Installs native build tools
+- Recreates `.venv` using the container's Python
+- Installs build dependencies (including Cython)
+- Runs editable install with dev extras when RDM is available
+
+This means a `.venv` created on your host is intentionally replaced inside the
+container so ABI/toolchain details match the container environment.
+
+### Open in devcontainer
+
+1. Open this repository in VS Code.
+2. Run: Dev Containers: Reopen in Container.
+3. Wait for post-create setup to finish.
+4. Use the workspace `.venv` interpreter selected by the container settings.
+
+### Notes
+
+- The container needs access to the host folder used for `/opt/Raima`.
+    On Windows/macOS, ensure the source location is shared in Docker Desktop.
+- If your RDM install is in a different host location, update the mount entry
+    in `.devcontainer/devcontainer.json`.
+- Because the devcontainer runs Linux, macOS/Windows users need a Linux RDM
+    package available to mount into `/opt/Raima` for build/test workflows.
+    This may not match what a typical macOS/Windows user wants to install.
+- Without a devcontainer, follow the standard local install steps below.
+
 ## RDM Installation
 
 The build automatically detects RaimaDB installations in the
