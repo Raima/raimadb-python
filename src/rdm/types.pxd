@@ -49,6 +49,15 @@ cdef extern from "rdmtypes.h":
         RDM_TRANS_SNAPSHOT
         RDM_TRANS_NONE
 
+# RDM_TRANS_SCHEMA_UPDATE is a Cython-only mode flag (not a C enum value).
+# It signals _ValidateTrans to call rdm_dbStartUpdate with RDM_LOCK_SCHEMA.
+cdef extern from *:
+    """
+    #define RDM_TRANS_SCHEMA_UPDATE 100
+    """
+    int RDM_TRANS_SCHEMA_UPDATE
+
+cdef extern from "rdmtypes.h":
     cdef enum RDM_TRANS_PRECOMMIT_STATUS:
         RDM_TRANS_NOT_PRECOMMITTED
         RDM_TRANS_PRECOMMITTED

@@ -1,7 +1,7 @@
 # cython: language_level=3
 
 from .types cimport RDM_DB, RDM_CURSOR, RDM_RETCODE, RDM_OPEN_MODE, RDM_TABLE_ID, RDM_KEY_ID
-from .types cimport RDM_TRANS_STATUS, RDM_TRANS_READ, RDM_TRANS_UPDATE, RDM_TRANS_SNAPSHOT
+from .types cimport RDM_TRANS_STATUS, RDM_TRANS_READ, RDM_TRANS_UPDATE, RDM_TRANS_SNAPSHOT, RDM_TRANS_SCHEMA_UPDATE
 from .types cimport RDM_LOCK_STATUS, RDM_ENCRYPT
 from .types cimport RDM_LOCK_SCHEMA
 from .tfstypes cimport TFS_TYPE, RDM_TFS
@@ -134,7 +134,7 @@ cdef class RdmDb(_ValidateDb):
         cdef RdmTrans trans = None
         rc = self._validate()
         if rc == sOKAY:
-            trans = RdmTrans(self, <RDM_TRANS_STATUS> 100, _token)  # 100 = schema update mode
+            trans = RdmTrans(self, <RDM_TRANS_STATUS> RDM_TRANS_SCHEMA_UPDATE, _token)
         return factory.handleCode(rc), trans
 
     def insertRow(self, str table_name, **kwargs):

@@ -7,7 +7,7 @@ from libc.stddef cimport size_t
 from libc.stdlib cimport malloc, free
 from .tfstypes cimport RDM_TFS
 from .types cimport RDM_CURSOR, RDM_ENCRYPT, RDM_TABLE_ID, RDM_LOCK_ALL, RDM_LOCK_SCHEMA
-from .types cimport RDM_TRANS_STATUS, RDM_TRANS_READ, RDM_TRANS_UPDATE, RDM_TRANS_SNAPSHOT
+from .types cimport RDM_TRANS_STATUS, RDM_TRANS_READ, RDM_TRANS_UPDATE, RDM_TRANS_SNAPSHOT, RDM_TRANS_SCHEMA_UPDATE
 from .retcodetypes cimport RDM_RETCODE, sOKAY, eINVFCNSEQ
 from .exceptions_factory import factory
 
@@ -220,9 +220,9 @@ cdef class _ValidateTrans:
             elif mode == RDM_TRANS_SNAPSHOT:
                 with nogil:
                     rc = rdm_dbStartSnapshot(db.db, RDM_LOCK_ALL, 0, &self.trans)
-            elif <int> mode == 100:  # RDM_TRANS_SCHEMA_UPDATE: lock schema for alterCatalog
+            elif mode == RDM_TRANS_SCHEMA_UPDATE:
                 with nogil:
-                    rc = rdm_dbStartUpdate(db.db, RDM_LOCK_SCHEMA, 1, RDM_LOCK_ALL, 0, &self.trans)
+                    rc = rdm_dbStartUpdate(db.db, RDM_LOCK_SCHEMA, 0, RDM_LOCK_SCHEMA, 0, &self.trans)
             else:
                 raise ValueError("Invalid transaction mode")
         factory.handleCode(rc)
