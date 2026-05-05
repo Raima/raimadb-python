@@ -19,9 +19,46 @@ from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext as _build_ext
 
 
+DEFAULT_RDM_EDITION = "core"
+DEFAULT_RDM_VERSION = "16.1"
+
+
 # ---------------------------------------------------------------------------
 # RDM installation auto-detection
 # ---------------------------------------------------------------------------
+def _find_preferred_rdm_installation():
+    """Return the preferred RDM installation for the default edition/version."""
+    if sys.platform == "win32":
+        base = "C:/Raima"
+        pattern = os.path.join(
+            base, f"rdm_{DEFAULT_RDM_EDITION}-{DEFAULT_RDM_VERSION}*"
+        )
+        version_re = rf"rdm_({re.escape(DEFAULT_RDM_EDITION)})-({re.escape(DEFAULT_RDM_VERSION)}(?:\.\d+)*)$"
+    else:
+        base = "/opt/Raima"
+        pattern = os.path.join(
+            base, f"rdm_{DEFAULT_RDM_EDITION}-{DEFAULT_RDM_VERSION}"
+        )
+        version_re = rf"rdm_({re.escape(DEFAULT_RDM_EDITION)})-({re.escape(DEFAULT_RDM_VERSION)})$"
+
+    edition_rank = {"core": 3, "pro": 2, "enterprise": 1}
+    candidates = []
+    for path in sorted(glob.glob(pattern)):
+        name = os.path.basename(path)
+        m = re.match(version_re, name)
+        if m and os.path.isdir(os.path.join(path, "include")):
+            edition = m.group(1)
+            rank = edition_rank.get(edition, 0)
+            version = tuple(int(x) for x in m.group(2).split("."))
+            candidates.append((version, rank, path))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda c: (c[0], c[1]), reverse=True)
+    return candidates[0][2]
+
+
 def _find_rdm_installation():
     """Search for the best RDM installation.
 
@@ -68,7 +105,7 @@ def _find_rdm_installation():
 
 
 project_root = os.path.dirname(os.path.abspath(__file__))
-rdm_install = _find_rdm_installation()
+rdm_install = _find_preferred_rdm_installation() or _find_rdm_installation()
 
 if rdm_install is None:
     search_dir = "C:/Raima" if sys.platform == "win32" else "/opt/Raima"
@@ -79,6 +116,12 @@ if rdm_install is None:
         file=sys.stderr,
     )
     sys.exit(1)
+
+selected_rdm = os.path.realpath(rdm_install)
+print(
+    f"Using RDM installation: {os.path.basename(selected_rdm)} ({selected_rdm})",
+    file=sys.stderr,
+)
 
 rdm_include = os.path.join(rdm_install, "include")
 rdm_lib = os.path.join(rdm_install, "lib")
